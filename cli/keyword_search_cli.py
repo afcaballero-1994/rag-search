@@ -16,11 +16,12 @@ def main() -> None:
             with open("data/movies.json") as file:
                 data = json.load(file)
                 i: int = 0
+                limit: int = 5
                 for v in data["movies"]:
                     if args.query in v["title"]: 
                         print(f"{i + 1}. {v["title"]}")
                         i += 1
-                        if i == 5:
+                        if i == limit:
                             break
 
         case _:
