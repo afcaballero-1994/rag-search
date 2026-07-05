@@ -12,6 +12,7 @@ class Movie(TypedDict):
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = os.path.join(PROJECT_ROOT, "data", "movies.json")
+STOPWORDS_PATH = os.path.join(PROJECT_ROOT, "data", "stopwords.txt")
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Keyword Search CLI")
@@ -34,14 +35,14 @@ def main() -> None:
 def search_command(query: str, limit: int = 5):
     movies = load_movies()
     i: int = 0
-    query_processed: list[str] = preprocess_text(query)
+    query_processed: list[str] = tokenize_text(query)
     found: bool = False
 
     for movie in movies:
         if i == limit:
             break
         for word in query_processed:
-            for wtitle in preprocess_text(movie["title"]):
+            for wtitle in tokenize_text(movie["title"]):
                 if word in wtitle:
                     print(f"{i + 1}. {movie["title"]}")
                     i += 1
@@ -57,14 +58,32 @@ def load_movies() ->list[Movie]:
     with open(DATA_PATH) as file:
         data = json.load(file)
     return data["movies"]
+def load_stopwords() ->list[str]:
+    result: list[str] = []
+    with open(STOPWORDS_PATH, "r", encoding="utf-8") as f:
+        file_str = preprocess_text(f.read())
+        result = file_str.splitlines()
 
-def preprocess_text(input: str) -> list[str]:
-    result = input.lower()
-    to_remove: str = string.punctuation
-    table = str.maketrans("", "", to_remove)
-    result = result.translate(table)
-    result = list(filter(None, result.split()))
     return result
 
+
+def preprocess_text(input: str) -> str:
+    result = input.lower()
+    table = str.maketrans("", "", string.punctuation)
+    result = result.translate(table)
+    
+    return result
+
+STOPWORDS: list[str] = [preprocess_text(x) for x in load_stopwords()]
+
+def tokenize_text(input: str) -> list[str]:
+    tokens = preprocess_text(input).split()
+    result: list[str] = []
+
+    for token in tokens:
+        if token:
+            result.append(token)
+    result = list(filter(lambda x: x not in STOPWORDS, result))
+    return result
 if __name__ == "__main__":
     main()
