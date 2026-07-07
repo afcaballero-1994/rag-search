@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 from typing import TypedDict
 import string
+from nltk.stem import PorterStemmer
+
 
 class Movie(TypedDict):
     id: int
@@ -13,6 +15,8 @@ class Movie(TypedDict):
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = os.path.join(PROJECT_ROOT, "data", "movies.json")
 STOPWORDS_PATH = os.path.join(PROJECT_ROOT, "data", "stopwords.txt")
+
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Keyword Search CLI")
@@ -79,11 +83,13 @@ STOPWORDS: list[str] = [preprocess_text(x) for x in load_stopwords()]
 def tokenize_text(input: str) -> list[str]:
     tokens = preprocess_text(input).split()
     result: list[str] = []
+    stemmer = PorterStemmer()
 
     for token in tokens:
         if token:
             result.append(token)
     result = list(filter(lambda x: x not in STOPWORDS, result))
+    result = [stemmer.stem(tok) for tok in result]
     return result
 if __name__ == "__main__":
     main()
