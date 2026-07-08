@@ -6,6 +6,7 @@ from typing import TypedDict
 import string
 from nltk.stem import PorterStemmer
 from collections import defaultdict
+from collections import Counter
 import pickle
 import sys
 
@@ -22,6 +23,7 @@ class Movie(TypedDict):
 class InvertedIndex:
     index: dict[str, set[int]] = defaultdict(set)
     docmap: dict[int, Movie] = {}
+    term_frequencies: dict[int, Counter] = defaultdict(Counter)
 
 
     def __add_document(self, doc_id: int, text: str) -> None:
@@ -30,10 +32,21 @@ class InvertedIndex:
         for token in set(tokens):
             self.index[token].add(doc_id)
 
+        self.term_frequencies[doc_id].update(tokens)
 
     def get_documents(self, term: str) -> list[int]:
         result: list[int] = list(self.index[term])
         return sorted(result)
+
+    def get_tf(self, doc_id: int, term: str) -> int:
+        
+        return self.term_frequencies[doc_id][term]
+
+    def tokenize_term(self, term: str) -> str:
+        token: list[str] = tokenize_text(term)
+        if len(token) != 1:
+            raise Exception("Too many tokens generated with term tokenizer")
+        return token[0]
 
     def build(self) -> None:
         movies: list[Movie] = load_movies()
@@ -46,15 +59,21 @@ class InvertedIndex:
         os.makedirs(CACHE_PATH, exist_ok=True)
         index_path: str = os.path.join(CACHE_PATH, "index.pkl")
         docmap_path: str = os.path.join(CACHE_PATH, "docmap.pkl")
+        term_path: str = os.path.join(CACHE_PATH, "term_frequencies.pkl")
+        
         with open(index_path, "wb") as f:
             pickle.dump(self.index, f)
 
         with open(docmap_path, "wb") as f:
             pickle.dump(self.docmap, f)
 
+        with open(term_path, "wb") as f:
+            pickle.dump(self.term_frequencies, f)
+
     def load(self) -> None:
         index_path: str = os.path.join(CACHE_PATH, "index.pkl")
         docmap_path: str = os.path.join(CACHE_PATH, "docmap.pkl")
+        term_path: str = os.path.join(CACHE_PATH, "term_frequencies.pkl")
 
         try:
             with open(index_path, "rb") as f1:
@@ -64,11 +83,17 @@ class InvertedIndex:
             sys.exit()
 
         try:
-            with open(docmap_path, "rb") as f2:
-                self.docmap = pickle.load(f2)
+            with open(term_path, "rb") as f2:
+                self.term_frequencies = pickle.load(f2)
+        except FileNotFoundError:
+            print(f"Error: file {term_path} does not exist")
+            sys.exit()
+
+        try:
+            with open(docmap_path, "rb") as f:
+                self.docmap = pickle.load(f)
         except FileNotFoundError:
             print(f"Error: file {docmap_path} does not exist")
-            sys.exit()
             
 def search_command(query: str, limit: int = 5):
     iidx = InvertedIndex()
@@ -132,7 +157,10 @@ def main() -> None:
 
     search_parser = subparsers.add_parser("search", help="Search movies using keywords")
     subparsers.add_parser("build", help="Build the index reverse")
+    tf_parser = subparsers.add_parser("tf", help="Show the term freqency")
     search_parser.add_argument("query", type=str, help="Search query")
+    tf_parser.add_argument("doc_id", type=int, help="Doc ID document for frequency")
+    tf_parser.add_argument("term", type=str, help="Term frequency arg")
 
     args = parser.parse_args()
 
@@ -144,6 +172,12 @@ def main() -> None:
             i = InvertedIndex()
             i.build()
             i.save()
+        case "tf":
+            i = InvertedIndex()
+            i.load()
+            term = i.tokenize_term(args.term)
+            fq = i.get_tf(args.doc_id, term)
+            print(f"The frequency of {args.term} is {fq}")
 
         case _:
             parser.print_help()
