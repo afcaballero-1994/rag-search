@@ -81,7 +81,8 @@ class InvertedIndex:
     def get_tf(self, doc_id: int, term: str) -> int:
         if doc_id not in self.term_frequencies:
             return 0
-        return self.term_frequencies[doc_id][term]
+        tok = self.tokenize_term(term)
+        return self.term_frequencies[doc_id][tok]
 
     
     def get_idf(self, term: str) -> float:
