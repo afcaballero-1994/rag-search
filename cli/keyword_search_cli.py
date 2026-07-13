@@ -79,11 +79,14 @@ class InvertedIndex:
             
         return result
     def get_tf(self, doc_id: int, term: str) -> int:
-        
+        if doc_id not in self.term_frequencies:
+            return 0
         return self.term_frequencies[doc_id][term]
+
+    
     def get_idf(self, term: str) -> float:
         tok = self.tokenize_term(term)
-        tf: int = len(self.index[tok])
+        tf: int = len(self.index.get(tok, ()))
             
         idf = math.log( (len(self.term_frequencies) + 1) / (tf + 1))
 
@@ -98,7 +101,7 @@ class InvertedIndex:
     def tokenize_term(self, term: str) -> str:
         token: list[str] = self.tokenize_text(term)
         if len(token) != 1:
-            raise Exception("Too many tokens generated with term tokenizer")
+            raise ValueError("Error tokenizing term")
         return token[0]
 
     def build(self) -> None:
