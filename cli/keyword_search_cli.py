@@ -14,6 +14,8 @@ import pickle
 import sys
 import math
 
+BM25_K1: float = 1.5
+
 class Movie(TypedDict):
     id: int
     title: str
@@ -98,6 +100,18 @@ class InvertedIndex:
         tf: int = self.get_tf(doc_id, term)
         idf: float = self.get_idf(term)
         return tf * idf
+
+    def get_bm25_idf(self, term: str) -> float:
+        doc_count: int = len(self.docmap)
+        term_doc_count: int = len(self.index.get(term, ()))
+
+        bm25: float = math.log( (doc_count - term_doc_count + 0.5) / (term_doc_count + 0.5) + 1)
+        return bm25
+
+    def get_bm25_tf(self, doc_id: int, term: str, k1:float=BM25_K1) -> float:
+        tf = self.get_tf(doc_id, term)
+
+        return (tf * (k1 + 1)) / (tf + k1)
 
     def tokenize_term(self, term: str) -> str:
         token: list[str] = self.tokenize_text(term)
@@ -197,6 +211,16 @@ def main() -> None:
     tfidf_parser.add_argument("doc_id", type=int, help="Document ID")
     tfidf_parser.add_argument("term", type=str, help="Term for the calculation")
 
+    bm25_idf_parser = subparsers.add_parser("bm25idf", help="Get BM25 IDF score")
+    bm25_idf_parser.add_argument("term", type=str, help="Term to get BM25")
+
+    bm25_tf_parser = subparsers.add_parser(
+        "bm25tf", help="Get BM25 TF score given document id and term"
+    )
+    bm25_tf_parser.add_argument("doc_id", type=int, help="Document ID")
+    bm25_tf_parser.add_argument("term", type=str, help="Term to get BM25 TF")
+    bm25_tf_parser.add_argument("k1", type=float, nargs='?', default=BM25_K1, help="Tunable k1 BM25 parameter")
+
     args = parser.parse_args()
 
     match args.command:
@@ -221,6 +245,20 @@ def main() -> None:
             i = InvertedIndex()
             tfidf: float = i.get_tfidf(args.doc_id, args.term)
             print(f"TF-IDF score of {args.term} in document {args.doc_id} is {tfidf:.2f}")
+        case "bm25idf":
+            i = InvertedIndex()
+            term = i.tokenize_term(args.term)
+            score = i.get_bm25_idf(term)
+            print(f"BM25 IDF score of '{args.term}': {score:.2f}")
+        case "bm25tf":
+            i = InvertedIndex()
+            term = i.tokenize_term(args.term)
+            doc_id = args.doc_id
+            k1 = args.k1
+
+            bm25tf = i.get_bm25_tf(doc_id, term, k1)
+
+            print(f"BM25 TF score of '{term}' in document '{doc_id}':{bm25tf:.2f}")
         case _:
             parser.print_help()
 
