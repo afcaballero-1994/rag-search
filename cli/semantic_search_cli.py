@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+
 from keyword_search_cli import Movie
 from lib import semantic_search
 
@@ -23,6 +24,9 @@ def main() -> None:
     embed_text_parser.add_argument("text", type=str, help="Text used to generate emb")
 
     verify_embeddings_parser = subparsers.add_parser("verify_embeddings", help="Verify")
+
+    embed_query = subparsers.add_parser("embed_query", help="Generate embedding query")
+    embed_query.add_argument("query", type=str, help="Query to embbed")
     
     args = parser.parse_args()
 
@@ -42,6 +46,9 @@ def main() -> None:
             print(
                 f"Embeddings shape: {m.embeddings.shape[0]} vectors in {m.embeddings.shape[1]} dimensions"
             )
+
+        case "embed_query":
+            semantic_search.embed_query(args.query)
             
         case _:
             parser.print_help()
