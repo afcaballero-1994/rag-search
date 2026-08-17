@@ -1,6 +1,7 @@
 import os
 from sentence_transformers import SentenceTransformer
 import numpy as np
+from operator  import itemgetter
 import numpy.typing as npt
 from numpy.typing import NDArray
 from typing import Any
@@ -18,7 +19,7 @@ class SemanticSearch:
     def __init__(self, model_name: str = "all-MiniLM-L6-v2") -> None:
         self.model = SentenceTransformer(model_name)
         self.embeddings = None
-        self.documents = None
+        self.documents: list | None = None
         self.document_map = {}
 
     def generate_embedding(self, text: str):
@@ -55,6 +56,22 @@ class SemanticSearch:
         else:
             return self.build_embeddings(documents)
 
+    def search(self, query: str, limit: int = 5):
+        if self.embeddings is None:
+            raise ValueError("No embeddings loaded. Call load_or_create_embeddings first")
+        q_embeddings = self.generate_embedding(query)
+
+        result = []
+
+        for i, doc_embedding in enumerate(self.embeddings):
+            score = cosine_similarity(q_embeddings, doc_embedding)
+            r = (score, self.documents[i])
+            result.append(r)
+
+        result.sort(key=itemgetter(0), reverse=True)
+
+        return result[0:limit]
+
 def verify_model() -> None:
     m = SemanticSearch()
 
@@ -77,3 +94,12 @@ def embed_query(query: str):
     print(f"Query: {query}")
     print(f"First 3 dimensions: {r[:3]}")
     print(f"Shape: {r.shape}")
+
+def cosine_similarity(vec1: np.ndarray, vec2: np.ndarray) -> float:
+    d_product = np.dot(vec1, vec2)
+    n1 = np.linalg.norm(vec1)
+    n2 = np.linalg.norm(vec2)
+
+    if n1 == 0 or n2 == 0:
+        return 0.0
+    return d_product / (n1 * n2)

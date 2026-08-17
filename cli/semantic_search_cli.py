@@ -25,8 +25,12 @@ def main() -> None:
 
     verify_embeddings_parser = subparsers.add_parser("verify_embeddings", help="Verify")
 
-    embed_query = subparsers.add_parser("embed_query", help="Generate embedding query")
-    embed_query.add_argument("query", type=str, help="Query to embbed")
+    embed_query_parser = subparsers.add_parser("embed_query", help="Generate embedding query")
+    embed_query_parser.add_argument("query", type=str, help="Query to embbed")
+
+    search_parser = subparsers.add_parser("search", help="Search movies")
+    search_parser.add_argument("query", type=str,help="Query used search movies")
+    search_parser.add_argument("--limit", type=int, default=5, help="limit results")
     
     args = parser.parse_args()
 
@@ -49,7 +53,18 @@ def main() -> None:
 
         case "embed_query":
             semantic_search.embed_query(args.query)
-            
+        case "search":
+            movies = load_movies()
+            m = semantic_search.SemanticSearch()
+            m.load_or_create_embeddings(movies)
+
+            result = m.search(args.query, args.limit)
+
+            i = 1
+
+            for r in result:
+                print(f"{i}. {r[1]['title']} (score: {r[0]})\n {r[1]['description']}")
+                i += 1
         case _:
             parser.print_help()
 
