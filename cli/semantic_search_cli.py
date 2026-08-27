@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 
 from keyword_search_cli import Movie
@@ -31,6 +32,16 @@ def main() -> None:
     search_parser = subparsers.add_parser("search", help="Search movies")
     search_parser.add_argument("query", type=str,help="Query used search movies")
     search_parser.add_argument("--limit", type=int, default=5, help="limit results")
+
+    chunk_parser = subparsers.add_parser("chunk", help="Chunk texts")
+    chunk_parser.add_argument("text", type=str, help="Text to divide in chunks")
+    chunk_parser.add_argument("--chunk-size", type=int, default=200, help="Size of the chunks")
+    chunk_parser.add_argument("--overlap", type=int, default=0, help="Overlap between chunks")
+
+    semantic_chunk_parser = subparsers.add_parser("semantic_chunk", help="Semantic chunking")
+    semantic_chunk_parser.add_argument("text", type=str, help="Text to be divided")
+    semantic_chunk_parser.add_argument("--max-chunk-size", type=int, default=4, help="Maximmun chunks")
+    semantic_chunk_parser.add_argument("--overlap", type=int, default=0, help="Overlap")
     
     args = parser.parse_args()
 
@@ -64,6 +75,54 @@ def main() -> None:
 
             for r in result:
                 print(f"{i}. {r[1]['title']} (score: {r[0]})\n {r[1]['description']}")
+                i += 1
+
+        case "chunk":
+            splitted_text: list[str] = args.text.split(" ")
+
+            chunks_size: int = args.chunk_size
+            overlap: int = args.overlap
+            offset: int = 0
+            i: int = 1
+
+            print(f"Chunking {len(args.text)} characters")
+
+            while(offset < len(splitted_text)):
+                r = " "
+                if overlap > 0:
+                    if i == 1:
+                        r = r.join(splitted_text[offset:chunks_size + offset])
+                    else:
+                        r = r.join(splitted_text[offset-overlap: chunks_size + offset])
+                else:
+                    r = r.join(splitted_text[offset:chunks_size + offset])
+                print(f"{i}. {r}")
+                offset += chunks_size
+                i += 1
+
+        case "semantic_chunk":
+            chunks: list[str] = re.split(r"(?<=[.!?])\s+", args.text)
+
+            max_size = args.max_chunk_size
+            overlap = args.overlap
+
+            print(f"Semantically chunking {len(args.text)} characters")
+
+            result: list[str] = []
+            offset: int = 0
+
+
+            while (offset < len(chunks)):
+                chunk_sentences = chunks[offset: offset + max_size]
+
+                if result and len(chunk_sentences) <= overlap:
+                    break
+                result.append(" ".join(chunk_sentences))
+                offset += max_size - overlap
+
+            i: int = 1
+            for s in result:
+                print(f"{i}. {s}")
                 i += 1
         case _:
             parser.print_help()
