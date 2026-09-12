@@ -42,6 +42,8 @@ def main() -> None:
     semantic_chunk_parser.add_argument("text", type=str, help="Text to be divided")
     semantic_chunk_parser.add_argument("--max-chunk-size", type=int, default=4, help="Maximmun chunks")
     semantic_chunk_parser.add_argument("--overlap", type=int, default=0, help="Overlap")
+
+    embed_chunk_parser = subparsers.add_parser("embed_chunks", help="Semantic searching")
     
     args = parser.parse_args()
 
@@ -124,6 +126,14 @@ def main() -> None:
             for s in result:
                 print(f"{i}. {s}")
                 i += 1
+
+        case "embed_chunks":
+            movies = load_movies()
+            
+            sm = semantic_search.ChunkedSemanticSearch()
+            embeddings = sm.load_or_create_chunk_embeddings(movies)
+
+            print(f"Generated {len(embeddings)} chunked embeddings")
         case _:
             parser.print_help()
 
