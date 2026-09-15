@@ -7,6 +7,8 @@ from numpy.typing import NDArray
 from typing import Any
 from pathlib import Path
 
+SCORE_PRECISION = 3
+
 import re
 import json
 
@@ -49,15 +51,14 @@ class SemanticSearch:
         self.documents = documents
 
         for doc in documents:
-            for k, _ in doc.items():
-                self.document_map[k] = doc
+            self.document_map[doc["id"]] = doc
 
         if os.path.exists(self.file_path):
             self.embeddings = np.load(self.file_path)
             if len(self.embeddings) == len(documents):
                 return self.embeddings
-        else:
-            return self.build_embeddings(documents)
+        
+        return self.build_embeddings(documents)
 
     def search(self, query: str, limit: int = 5):
         if self.embeddings is None:
@@ -142,22 +143,23 @@ class ChunkedSemanticSearch(SemanticSearch):
         chunks: list[str] = []
         meta: list[dict] = []
 
-        for document in documents:
+        for idx, document in enumerate(documents):
             self.document_map[document['id']] = document
             if not document['description']:
-                break
+                continue
             tmp = semantic_chunking(document['description'], overlap=1)
-            for idx, chk in enumerate(tmp):
+            for i, chk in enumerate(tmp):
                 chunks.append(chk)
                 mtmp = {}
-                mtmp["movie_idx"] = document['id']
-                mtmp["chunk_idx"] = idx
+                mtmp["movie_idx"] = idx
+                mtmp["chunk_idx"] = i
                 mtmp["total_chunks"] = len(tmp)
                 meta.append(mtmp)
                 
         
 
         self.chunk_embeddings = self.model.encode(chunks, show_progress_bar=True)
+        self.chunk_metadata = meta
 
         with open(self.file_path, 'wb') as f:
             np.save(f, self.chunk_embeddings)
@@ -171,15 +173,56 @@ class ChunkedSemanticSearch(SemanticSearch):
         self.documents = documents
 
         for doc in documents:
-            for k, _ in doc.items():
-                self.document_map[k] = doc
+            self.document_map[doc["id"]] = doc
 
         if os.path.exists(self.json_path):
             with open(self.json_path, "r") as f:
-                self.chunk_metadata = json.load(f)
+                data = json.load(f)
+                self.chunk_metadata = data["chunks"]
 
         if os.path.exists(self.file_path):
             self.chunk_embeddings = np.load(self.file_path)
             return self.chunk_embeddings
-        else:
-            return self.build_chunk_embeddings(documents)
+        return self.build_chunk_embeddings(documents)
+
+    def search_chunks(self, query: str, limit: int = 10):
+        q_embbedings = self.generate_embedding(query)
+
+        chunk_scores = []
+
+        for idx, chk in enumerate(self.chunk_embeddings):
+            score = cosine_similarity(chk, q_embbedings)
+            tmp_dict = {
+                "chunk_idx": self.chunk_metadata[idx]["chunk_idx"],
+                "movie_idx": self.chunk_metadata[idx]["movie_idx"],
+                "score": score
+            }
+
+            chunk_scores.append(tmp_dict)
+
+        result_scores = {}
+
+        for chk in chunk_scores:
+            if not chk["movie_idx"] in result_scores:
+                result_scores[chk["movie_idx"]] = chk["score"]
+            else:
+                if chk["score"] > result_scores[chk["movie_idx"]]:
+                    result_scores[chk["movie_idx"]] = chk["score"]
+
+        sresults = dict(sorted(result_scores.items(), key=itemgetter(1), reverse=True)[:limit])
+
+        result = []
+
+        for k,v in sresults.items():
+            result.append(
+                {
+                    "id": self.documents[k]["id"],
+                    "title": self.documents[k]["title"],
+                    "document": self.documents[k]["description"][:100],
+                    "score": round(v, SCORE_PRECISION),
+                    "metadata": self.documents[k].get("metadata", {})
+                }
+            )
+
+        return result
+        
