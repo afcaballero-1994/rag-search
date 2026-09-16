@@ -108,24 +108,8 @@ def main() -> None:
                 i += 1
 
         case "semantic_chunk":
-            chunks: list[str] = re.split(r"(?<=[.!?])\s+", args.text)
-
-            max_size = args.max_chunk_size
-            overlap = args.overlap
-
-            print(f"Semantically chunking {len(args.text)} characters")
-
-            result: list[str] = []
-            offset: int = 0
-
-
-            while (offset < len(chunks)):
-                chunk_sentences = chunks[offset: offset + max_size]
-
-                if result and len(chunk_sentences) <= overlap:
-                    break
-                result.append(" ".join(chunk_sentences))
-                offset += max_size - overlap
+            text: str = args.text
+            result = semantic_search.semantic_chunking(text)
 
             i: int = 1
             for s in result:

@@ -109,7 +109,15 @@ def cosine_similarity(vec1: np.ndarray, vec2: np.ndarray) -> float:
     return d_product / (n1 * n2)
 
 def semantic_chunking(text: str, max_chunk_size: int = 4, overlap:int = 0) -> list[str]:
+    text = text.strip()
+
+    if len(text) == 0:
+        return []
+    
     chunks: list[str] = re.split(r"(?<=[.!?])\s+", text)
+
+    if len(chunks) == 1 and not text.endswith((".", "!", "?")):
+        chunks = [text]
 
     max_size = max_chunk_size
     overlap = overlap
@@ -125,7 +133,18 @@ def semantic_chunking(text: str, max_chunk_size: int = 4, overlap:int = 0) -> li
 
         if result and len(chunk_sentences) <= overlap:
             break
-        result.append(" ".join(chunk_sentences))
+
+
+        cleaned_sentences = []
+        for chunk_sentence in chunk_sentences:
+            chunk_sentence = chunk_sentence.strip()
+            if chunk_sentence:
+                cleaned_sentences.append(chunk_sentence)
+        if not cleaned_sentences:
+            offset += max_size - overlap
+            continue
+        
+        result.append(" ".join(cleaned_sentences))
         offset += max_size - overlap
 
     return result
