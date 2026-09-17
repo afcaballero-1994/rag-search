@@ -31,24 +31,35 @@ def main() -> None:
 
     search_parser = subparsers.add_parser("search", help="Search movies")
     search_parser.add_argument("query", type=str,help="Query used search movies")
-    search_parser.add_argument("--limit", type=int, default=5, help="limit results")
+    search_parser.add_argument("--limit", type=int,
+                               nargs="?",
+                               default=5, help="limit results")
 
     chunk_parser = subparsers.add_parser("chunk", help="Chunk texts")
     chunk_parser.add_argument("text", type=str, help="Text to divide in chunks")
-    chunk_parser.add_argument("--chunk-size", type=int, default=200, help="Size of the chunks")
-    chunk_parser.add_argument("--overlap", type=int, default=0, help="Overlap between chunks")
+    chunk_parser.add_argument("--chunk-size", type=int,
+                              nargs="?",
+                              default=200, help="Size of the chunks")
+    chunk_parser.add_argument("--overlap", type=int, default=0,
+                              nargs="?",
+                              help="Overlap between chunks")
 
     semantic_chunk_parser = subparsers.add_parser("semantic_chunk", help="Semantic chunking")
     semantic_chunk_parser.add_argument("text", type=str, help="Text to be divided")
-    semantic_chunk_parser.add_argument("--max-chunk-size", type=int, default=4, help="Maximmun chunks")
-    semantic_chunk_parser.add_argument("--overlap", type=int, default=0, help="Overlap")
+    semantic_chunk_parser.add_argument("--max-chunk-size",
+                                       type=int, nargs="?",
+                                       default=4, help="Maximmun chunks")
+    semantic_chunk_parser.add_argument("--overlap", type=int, default=0,
+                                       nargs="?", help="Overlap")
 
     embed_chunk_parser = subparsers.add_parser("embed_chunks", help="Semantic searching")
 
     search_chunked_parser = subparsers.add_parser("search_chunked", help="Semantic search chunk")
 
     search_chunked_parser.add_argument("query", type=str, help="Search queery")
-    search_chunked_parser.add_argument("--limit", type=int, default=5, help="limit search")
+    search_chunked_parser.add_argument("--limit", type=int,
+                                       nargs="?",
+                                       default=5, help="limit search")
     
     args = parser.parse_args()
 
