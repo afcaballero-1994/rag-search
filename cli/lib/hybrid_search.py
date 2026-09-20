@@ -1,8 +1,102 @@
+import json
 import os
 from operator import itemgetter
 
+from typing import Literal
+
+from openai import OpenAI
+from dotenv import load_dotenv
+
 from .keyword_search import InvertedIndex
 from .semantic_search import ChunkedSemanticSearch
+
+def get_prompt(query: str, method: str) -> str | None:
+    ENHANCED_METHODS = {
+    "spell": f"""Fix any spelling errors in the user-provided movie search query below.
+Correct only clear, high-confidence typos. Do not rewrite, add, remove, or reorder words.
+Preserve punctuation and capitalization unless a change is required for a typo fix.
+If there are no spelling errors, or if you're unsure, output the original query unchanged.
+Output only the final query text, nothing else.
+User query: "{query}"
+""",
+    "rewrite": f"""Rewrite the user-provided movie search query below to be more specific and searchable.
+
+Consider:
+- Common movie knowledge (famous actors, popular films)
+- Genre conventions (horror = scary, animation = cartoon)
+- Keep the rewritten query concise (under 10 words)
+- It should be a Google-style search query, specific enough to yield relevant results
+- Don't use boolean logic
+
+Examples:
+- "that bear movie where leo gets attacked" -> "The Revenant Leonardo DiCaprio bear attack"
+- "movie about bear in london with marmalade" -> "Paddington London marmalade"
+- "scary movie with bear from few years ago" -> "bear horror movie 2015-2020"
+
+If you cannot improve the query, output the original unchanged.
+Output only the rewritten query text, nothing else.
+
+User query: "{query}"
+""",
+"expand": f"""Expand the user-provided movie search query below with related terms.
+
+Add synonyms and related concepts that might appear in movie descriptions.
+Keep expansions relevant and focused.
+Output only the additional terms; they will be appended to the original query.
+
+Examples:
+- "scary bear movie" -> "scary horror grizzly bear movie terrifying film"
+- "action movie with bear" -> "action thriller bear chase fight adventure"
+- "comedy with bear" -> "comedy funny bear humor lighthearted"
+
+User query: "{query}"
+"""
+}
+    if method not in ENHANCED_METHODS:
+        return None
+    return ENHANCED_METHODS[method]
+
+def get_prompt_rerank(query: str, doc: dict = dict(),
+                      method: Literal["individual", "batch"] | None = None,
+                      doc_list_str: list | str | None = None) -> str | None:
+    if method is None:
+        return None
+    RERANK_METHOD = {
+        "individual": f"""Rate how well this movie matches the search query.
+
+Query: "{query}"
+Movie: {doc.get("title", "")} - {doc.get("document", "")}
+
+Consider:
+- Direct relevance to query
+- User intent (what they're looking for)
+- Content appropriateness
+
+Rate 0-10 (10 = perfect match).
+Output ONLY the number in your response, no other text or explanation.
+
+Score:""",
+        "batch": f"""Rank the movies listed below by relevance to the following search query.
+
+Query: "{query}"
+
+Movies:
+{doc_list_str}
+
+Return the movie IDs in order of relevance, best match first.
+
+Your response must be a raw JSON array of integers.
+Do not wrap the JSON in Markdown. Do not use a ```json code block.
+Do not include any explanatory text.
+
+For example:
+[75, 12, 34, 2, 1]
+
+Ranking:"""
+    }
+    if method not in RERANK_METHOD:
+        return None
+    return RERANK_METHOD[method]
 
 def hybrid_score(bm25_score: float, semantic_score: float, alpha=0.5) -> float:
     return alpha * bm25_score + (1 - alpha) * semantic_score
@@ -24,6 +118,119 @@ def normalize_command(scores: list[float]) -> list[float]:
         result.append( (score - min_score) / (max_score - min_score))
 
     return result
+
+def enhance_query(query: str, method: Literal["spell", "rewrite", "expand"] | None = None) -> str:
+    if method is None:
+        return query
+    prompt = get_prompt(query, method)
+    if prompt is None:
+        return query
+    
+    load_dotenv()
+    model = "openrouter/free"
+
+    api_key = os.environ.get("OPENROUTER_API_KEY")
+    if not api_key:
+       raise RuntimeError("OPENROUTER_API_KEY environment variable not set")
+
+    client = OpenAI(
+       base_url="https://openrouter.ai/api/v1",
+       api_key=api_key,
+   )
+
+    response = client.chat.completions.create(
+        model=model, messages=[{"role": "user", "content": prompt}]
+    )
+
+    enhanced_query: str | None = response.choices[0].message.content
+
+    if enhanced_query is not None:
+        print(f"Enhanced query ({method}): '{query}' -> '{enhanced_query}'\n")
+        return enhanced_query
+
+    return query
+
+def rerank_results_individual(query: str,
+                   doc: dict = {},
+                   method: Literal["individual", "batch"] | None = None,
+                   ) -> None:
+    if method is None:
+        return
+    prompt = get_prompt_rerank(query, doc, method)
+    if prompt is None:
+        return
+    
+    load_dotenv()
+    model = "openrouter/free"
+
+    api_key = os.environ.get("OPENROUTER_API_KEY")
+    if not api_key:
+       raise RuntimeError("OPENROUTER_API_KEY environment variable not set")
+
+    client = OpenAI(
+       base_url="https://openrouter.ai/api/v1",
+       api_key=api_key,
+   )
+
+    response = client.chat.completions.create(
+        model=model, messages=[{"role": "user", "content": prompt}]
+    )
+    data: str | None  = response.choices[0].message.content
+    if data is None:
+        return
+    doc["rerank_score"] = int(data.strip())
+
+
+def rerank_results_batch(query: str,
+                   doc_list_str: list[dict],
+                   method: Literal["individual", "batch"] | None = None,
+                   ) -> list[dict]:
+
+    if method is None:
+        raise ValueError("No method provided")
+    doc_map: dict = {}
+    doc_list: list[str] = []
+
+    for doc in doc_list_str:
+        doc_id = doc["id"]
+        doc_map[doc_id] = doc
+        doc_list.append(
+            f"{doc_id}: {doc.get("title", "")} - {doc.get("document", "")[:200]}"
+        )
+    docs_str = "\n".join(doc_list)
+    prompt = get_prompt_rerank(query, method=method, doc_list_str=docs_str)
+    if prompt is None:
+        raise RuntimeError("Not able to get prompt")
+    
+    load_dotenv()
+    model = "openrouter/free"
+
+    api_key = os.environ.get("OPENROUTER_API_KEY")
+    if not api_key:
+       raise RuntimeError("OPENROUTER_API_KEY environment variable not set")
+
+    client = OpenAI(
+       base_url="https://openrouter.ai/api/v1",
+       api_key=api_key,
+   )
+
+    response = client.chat.completions.create(
+        model=model, messages=[{"role": "user", "content": prompt}]
+    )
+    data: str | None  = response.choices[0].message.content
+    if data is None:
+        raise RuntimeError("No response received from model")
+    scores = json.loads(data)
+
+    reranked = []
+    for idx, d_id in enumerate(scores):
+        if d_id in doc_map:
+            reranked.append(
+                {
+                    **doc_map[d_id], "rerank_score": idx + 1
+                }
+            )
+    return reranked
 
 class HybridSearch:
     def __init__(self, documents: list[dict]) -> None:
@@ -98,7 +305,11 @@ class HybridSearch:
             
             
 
-    def rrf_search(self, query: str, k: int, limit: int = 10) -> list[dict]:
+    def rrf_search(self, query: str, k: int, limit: int = 10,
+                   method: Literal["spell", "rewrite", "expand"] | None = None,
+                   rerank_method: Literal["individual"] | None = None
+                   ) -> list[dict]:
+        query = enhance_query(query, method)
         bm25_results = self._bm25_search(query, limit)
         semantic_results = self.semantic_search.search_chunks(query, limit)
 
@@ -146,5 +357,14 @@ class HybridSearch:
                 "rrf_score": data["rrf_score"]
             }
             response.append(tmp)
+
+        if rerank_method is not None:
+            if rerank_method == "individual":
+                for doc in response:
+                    rerank_results_individual(query, doc, rerank_method)
+                return sorted(response, key=lambda x: x["rerank_score"], reverse=True)
+            if rerank_method == "batch":
+                re = rerank_results_batch(query, response, method=rerank_method)
+                return sorted(re, key=lambda x: x["rerank_score"], reverse=False)
 
         return sorted(response, key=lambda x: x["rrf_score"], reverse=True)

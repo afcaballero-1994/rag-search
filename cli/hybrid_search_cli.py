@@ -2,8 +2,6 @@ import argparse
 import os
 from pathlib import Path
 import json
-from openai import OpenAI
-from dotenv import load_dotenv
 
 from lib.hybrid_search import normalize_command
 from lib.hybrid_search import HybridSearch
@@ -17,16 +15,7 @@ def load_movies() ->list[dict]:
     return data["movies"]
 
 def main() -> None:
-    load_dotenv()
-
-    api_key = os.environ.get("OPENROUTER_API_KEY")
-    if not api_key:
-       raise RuntimeError("OPENROUTER_API_KEY environment variable not set")
-
-    client = OpenAI(
-       base_url="https://openrouter.ai/api/v1",
-       api_key=api_key,
-   )
+    
 
     parser = argparse.ArgumentParser(description="Hybrid Search CLI")
     subparser = parser.add_subparsers(dest="command", help="Available Commands")
@@ -57,8 +46,16 @@ def main() -> None:
     rrf_search_parser.add_argument(
         "--enhance",
         type=str,
-        choices=["spell"],
+        choices=["spell", "rewrite", "expand"],
         help="Query enhancement method",
+    )
+
+    rrf_search_parser.add_argument(
+        "--rerank-method",
+        type=str,
+        nargs="?",
+        choices=["individual", "batch"],
+        help="Rerank method to be used"
     )
     
     args = parser.parse_args()
@@ -81,38 +78,21 @@ def main() -> None:
         case "rrf-search":
             movies = load_movies()
             mh = HybridSearch(movies)
-            response = None
 
-            if args.enhance == "spell":
-                response = client.chat.completions.create(
-                    model="openrouter/free",
-                    messages = [
-                        {
-                            "role": "user",
-                            "content": f"""Fix any spelling errors in the user-provided movie search query below.
-Correct only clear, high-confidence typos. Do not rewrite, add, remove, or reorder words.
-Preserve punctuation and capitalization unless a change is required for a typo fix.
-If there are no spelling errors, or if you're unsure, output the original query unchanged.
-Output only the final query text, nothing else.
-User query: "{args.query}"
-"""
-                        }
-                    ]
-                )
-
-            if response is not None:
-                query = response.choices[0].message.content
-                print(f"Enhanced query: ({args.enhance}): '{args.query}' -> '{query}'")
-            else:
-                query = args.query
-
-            if query is None:
-                raise RuntimeError("Invalid query")
+            limit = args.limit
+            if args.rerank_method is not None:
+                limit *= 5
             
-            results = mh.rrf_search(query, args.k, args.limit)
+            results = mh.rrf_search(args.query, args.k, limit, args.enhance, args.rerank_method)
             
-            for idx, doc in enumerate(results, 1):
-                print(f"{idx}. {doc["title"]}\nRRF Score: {doc["rrf_score"]:.3f}")
+            for idx, doc in enumerate(results[:args.limit], 1):
+                print(f"{idx}. {doc["title"]}")
+                if args.rerank_method is not None:
+                    if args.rerank_method == "individual":
+                        print(f"Re-rank Score: {doc["rerank_score"]}/10")
+                    if args.rerank_method == "batch":
+                        print(f"Re-rank Score: {doc["rerank_score"]}")
+                print(f"RRF Score: {doc["rrf_score"]:.3f}")
                 print(f"BM25 Rank: {doc["bm25_rank"]}, Semantic Rank: {doc["semantic_rank"]}")
                 print(f"{doc["document"]}...")
         case _:
