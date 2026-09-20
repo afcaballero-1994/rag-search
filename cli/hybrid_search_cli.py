@@ -54,7 +54,7 @@ def main() -> None:
         "--rerank-method",
         type=str,
         nargs="?",
-        choices=["individual", "batch"],
+        choices=["individual", "batch", "cross_encoder"],
         help="Rerank method to be used"
     )
     
@@ -92,6 +92,8 @@ def main() -> None:
                         print(f"Re-rank Score: {doc["rerank_score"]}/10")
                     if args.rerank_method == "batch":
                         print(f"Re-rank Score: {doc["rerank_score"]}")
+                    if args.rerank_method == "cross_encoder":
+                        print(f"Cross Encoder Score: {doc["cross_encoder_score"]:.3f}")
                 print(f"RRF Score: {doc["rrf_score"]:.3f}")
                 print(f"BM25 Rank: {doc["bm25_rank"]}, Semantic Rank: {doc["semantic_rank"]}")
                 print(f"{doc["document"]}...")

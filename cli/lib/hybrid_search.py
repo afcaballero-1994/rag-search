@@ -10,6 +10,8 @@ from dotenv import load_dotenv
 from .keyword_search import InvertedIndex
 from .semantic_search import ChunkedSemanticSearch
 
+from sentence_transformers import CrossEncoder
+
 def get_prompt(query: str, method: str) -> str | None:
     ENHANCED_METHODS = {
     "spell": f"""Fix any spelling errors in the user-provided movie search query below.
@@ -161,7 +163,7 @@ def rerank_results_individual(query: str,
         return
     
     load_dotenv()
-    model = "openrouter/free"
+    model = "inclusionai/ling-3.0-flash-fin:free"
 
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
@@ -203,7 +205,7 @@ def rerank_results_batch(query: str,
         raise RuntimeError("Not able to get prompt")
     
     load_dotenv()
-    model = "openrouter/free"
+    model = "inclusionai/ling-3.0-flash-fin:free"
 
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
@@ -231,6 +233,27 @@ def rerank_results_batch(query: str,
                 }
             )
     return reranked
+
+def rerank_cross_encoder(query: str, response: list[dict]) -> list[dict]:
+    pairs = []
+    for doc in response:
+        pairs.append([query, f"{doc.get("title", "")} - {doc.get("document", "")}"])
+
+    cross_encoder = CrossEncoder("cross-encoder/ms-marco-TinyBERT-L2-v2")
+
+    scores = cross_encoder.predict(pairs)
+    print(len(scores))
+
+    result = []
+
+    for idx, doc in enumerate(response):
+        result.append(
+            {
+                **doc, "cross_encoder_score": scores[idx]
+            }
+        )
+
+    return result
 
 class HybridSearch:
     def __init__(self, documents: list[dict]) -> None:
@@ -307,7 +330,7 @@ class HybridSearch:
 
     def rrf_search(self, query: str, k: int, limit: int = 10,
                    method: Literal["spell", "rewrite", "expand"] | None = None,
-                   rerank_method: Literal["individual"] | None = None
+                   rerank_method: Literal["individual", "batch", "cross_encoder"] | None = None
                    ) -> list[dict]:
         query = enhance_query(query, method)
         bm25_results = self._bm25_search(query, limit)
@@ -366,5 +389,8 @@ class HybridSearch:
             if rerank_method == "batch":
                 re = rerank_results_batch(query, response, method=rerank_method)
                 return sorted(re, key=lambda x: x["rerank_score"], reverse=False)
+            if rerank_method == "cross_encoder":
+                re = rerank_cross_encoder(query, response)
+                return sorted(re, key=lambda x: x["cross_encoder_score"], reverse=True)
 
         return sorted(response, key=lambda x: x["rrf_score"], reverse=True)
