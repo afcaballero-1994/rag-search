@@ -12,6 +12,10 @@ from .semantic_search import ChunkedSemanticSearch
 
 from sentence_transformers import CrossEncoder
 
+
+MODEL = "dots-studio/dots-3-note-preview:free"
+
+
 def get_prompt(query: str, method: str) -> str | None:
     ENHANCED_METHODS = {
     "spell": f"""Fix any spelling errors in the user-provided movie search query below.
@@ -129,7 +133,6 @@ def enhance_query(query: str, method: Literal["spell", "rewrite", "expand"] | No
         return query
     
     load_dotenv()
-    model = "openrouter/free"
 
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
@@ -141,7 +144,7 @@ def enhance_query(query: str, method: Literal["spell", "rewrite", "expand"] | No
    )
 
     response = client.chat.completions.create(
-        model=model, messages=[{"role": "user", "content": prompt}]
+        model=MODEL, messages=[{"role": "user", "content": prompt}]
     )
 
     enhanced_query: str | None = response.choices[0].message.content
@@ -153,71 +156,49 @@ def enhance_query(query: str, method: Literal["spell", "rewrite", "expand"] | No
     return query
 
 def rerank_results_individual(query: str,
-                   doc: dict = {},
-                   method: Literal["individual", "batch"] | None = None,
-                   ) -> None:
-    if method is None:
-        return
-    prompt = get_prompt_rerank(query, doc, method)
-    if prompt is None:
-        return
+                   results: list[dict],
+                   client: OpenAI,
+                   ) -> list[dict]:
+    result = []
     
-    load_dotenv()
-    model = "inclusionai/ling-3.0-flash-fin:free"
+    for doc in results:
+        prompt = get_prompt_rerank(query, doc, method="individual")
+        if prompt is None:
+            raise ValueError("Not able to get a prompt for individual method")
 
-    api_key = os.environ.get("OPENROUTER_API_KEY")
-    if not api_key:
-       raise RuntimeError("OPENROUTER_API_KEY environment variable not set")
+        response = client.chat.completions.create(
+            model=MODEL, messages=[{"role": "user", "content": prompt}]
+        )
+        data: str | None  = response.choices[0].message.content
+        if data is None:
+            raise ValueError("Score was not valid for rerank individual")
+        print(data)
+        doc["rerank_score"] = int(data.strip())
+        result.append(doc)
 
-    client = OpenAI(
-       base_url="https://openrouter.ai/api/v1",
-       api_key=api_key,
-   )
-
-    response = client.chat.completions.create(
-        model=model, messages=[{"role": "user", "content": prompt}]
-    )
-    data: str | None  = response.choices[0].message.content
-    if data is None:
-        return
-    doc["rerank_score"] = int(data.strip())
+    return result
 
 
 def rerank_results_batch(query: str,
-                   doc_list_str: list[dict],
-                   method: Literal["individual", "batch"] | None = None,
+                   results: list[dict],
+                   client: OpenAI,
                    ) -> list[dict]:
-
-    if method is None:
-        raise ValueError("No method provided")
     doc_map: dict = {}
     doc_list: list[str] = []
 
-    for doc in doc_list_str:
+    for doc in results:
         doc_id = doc["id"]
         doc_map[doc_id] = doc
         doc_list.append(
             f"{doc_id}: {doc.get("title", "")} - {doc.get("document", "")[:200]}"
         )
     docs_str = "\n".join(doc_list)
-    prompt = get_prompt_rerank(query, method=method, doc_list_str=docs_str)
+    prompt = get_prompt_rerank(query, method="batch", doc_list_str=docs_str)
     if prompt is None:
         raise RuntimeError("Not able to get prompt")
-    
-    load_dotenv()
-    model = "inclusionai/ling-3.0-flash-fin:free"
-
-    api_key = os.environ.get("OPENROUTER_API_KEY")
-    if not api_key:
-       raise RuntimeError("OPENROUTER_API_KEY environment variable not set")
-
-    client = OpenAI(
-       base_url="https://openrouter.ai/api/v1",
-       api_key=api_key,
-   )
 
     response = client.chat.completions.create(
-        model=model, messages=[{"role": "user", "content": prompt}]
+        model=MODEL, messages=[{"role": "user", "content": prompt}]
     )
     data: str | None  = response.choices[0].message.content
     if data is None:
@@ -255,6 +236,26 @@ def rerank_cross_encoder(query: str, response: list[dict]) -> list[dict]:
 
     return result
 
+def rerank(query: str, results: list[dict], method: Literal["individual", "batch", "cross_encoder"]) -> list[dict]:
+    load_dotenv()
+    api_key = os.environ.get("OPENROUTER_API_KEY")
+    if not api_key:
+       raise RuntimeError("OPENROUTER_API_KEY environment variable not set")
+
+    client = OpenAI(
+       base_url="https://openrouter.ai/api/v1",
+       api_key=api_key,
+   )
+    match method:
+        case "individual":
+            re = rerank_results_individual(query, results, client)
+            return sorted(re, key=lambda x: x["rerank_score"], reverse=True)
+        case "batch":
+            re = rerank_results_batch(query, results, client)
+            return sorted(re, key=lambda x: x["rerank_score"], reverse=False)
+        case "cross_encoder":
+            re = rerank_cross_encoder(query, results)
+            return sorted(re, key=lambda x: x["cross_encoder_score"], reverse=True)
 class HybridSearch:
     def __init__(self, documents: list[dict]) -> None:
         self.documents = documents
@@ -382,15 +383,6 @@ class HybridSearch:
             response.append(tmp)
 
         if rerank_method is not None:
-            if rerank_method == "individual":
-                for doc in response:
-                    rerank_results_individual(query, doc, rerank_method)
-                return sorted(response, key=lambda x: x["rerank_score"], reverse=True)
-            if rerank_method == "batch":
-                re = rerank_results_batch(query, response, method=rerank_method)
-                return sorted(re, key=lambda x: x["rerank_score"], reverse=False)
-            if rerank_method == "cross_encoder":
-                re = rerank_cross_encoder(query, response)
-                return sorted(re, key=lambda x: x["cross_encoder_score"], reverse=True)
+            return rerank(query, response, rerank_method)
 
         return sorted(response, key=lambda x: x["rrf_score"], reverse=True)

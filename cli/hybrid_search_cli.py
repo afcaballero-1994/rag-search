@@ -89,14 +89,14 @@ def main() -> None:
                 print(f"{idx}. {doc["title"]}")
                 if args.rerank_method is not None:
                     if args.rerank_method == "individual":
-                        print(f"Re-rank Score: {doc["rerank_score"]}/10")
+                        print(f"- Re-rank Score: {doc["rerank_score"]}/10")
                     if args.rerank_method == "batch":
-                        print(f"Re-rank Score: {doc["rerank_score"]}")
+                        print(f"- Re-rank Score: {doc["rerank_score"]}")
                     if args.rerank_method == "cross_encoder":
-                        print(f"Cross Encoder Score: {doc["cross_encoder_score"]:.3f}")
-                print(f"RRF Score: {doc["rrf_score"]:.3f}")
-                print(f"BM25 Rank: {doc["bm25_rank"]}, Semantic Rank: {doc["semantic_rank"]}")
-                print(f"{doc["document"]}...")
+                        print(f"- Cross Encoder Score: {doc["cross_encoder_score"]:.3f}")
+                print(f"- RRF Score: {doc["rrf_score"]:.3f}")
+                print(f"- BM25 Rank: {doc["bm25_rank"]}, Semantic Rank: {doc["semantic_rank"]}")
+                print(f"-- {doc["document"]}...")
         case _:
             parser.print_help()
 
