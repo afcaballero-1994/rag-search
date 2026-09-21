@@ -92,19 +92,29 @@ class InvertedIndex:
 
 
     def tokenize_text(self, input: str) -> list[str]:
-        tokens = self.preprocess_text(input).split()
-        result: list[str] = []
+        text = self.preprocess_text(input)
+        tokens = text.split()
+        valid_tokens: list[str] = []
 
         for token in tokens:
-            if token and token not in self.STOPWORDS:
-                result.append(self.stemmer.stem(token))
+            if token:
+                valid_tokens.append(token)
+        filtered_words = []
+
+        for word in valid_tokens:
+            if word not in self.STOPWORDS:
+                filtered_words.append(word)
+        stemmer = PorterStemmer()
+        stemmed_words = []
+
+        for word in filtered_words:
+            stemmed_words.append(stemmer.stem(word))
             
-        return result
+        return stemmed_words
     def get_tf(self, doc_id: int, term: str) -> int:
         if doc_id not in self.term_frequencies:
             return 0
-        tok = self.tokenize_term(term)
-        return self.term_frequencies[doc_id][tok]
+        return self.term_frequencies[doc_id][term]
 
     
     def get_idf(self, term: str) -> float:
@@ -175,6 +185,7 @@ class InvertedIndex:
     def tokenize_term(self, term: str) -> str:
         token: list[str] = self.tokenize_text(term)
         if len(token) != 1:
+            print(term)
             raise ValueError("Error tokenizing term")
         return token[0]
 

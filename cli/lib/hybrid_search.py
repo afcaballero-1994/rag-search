@@ -385,4 +385,4 @@ class HybridSearch:
         if rerank_method is not None:
             return rerank(query, response, rerank_method)
 
-        return sorted(response, key=lambda x: x["rrf_score"], reverse=True)
+        return sorted(response, key=lambda x: x["rrf_score"], reverse=True)[:limit]
