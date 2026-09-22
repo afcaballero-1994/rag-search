@@ -1,5 +1,5 @@
 import argparse
-import os
+import os, logging
 from pathlib import Path
 import json
 
@@ -15,7 +15,7 @@ def load_movies() ->list[dict]:
     return data["movies"]
 
 def main() -> None:
-    
+    logging.basicConfig(filename="rff_search.log", level=logging.INFO)
 
     parser = argparse.ArgumentParser(description="Hybrid Search CLI")
     subparser = parser.add_subparsers(dest="command", help="Available Commands")

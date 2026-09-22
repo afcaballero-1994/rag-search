@@ -31,9 +31,7 @@ def main() -> None:
     for entry in dataset:
         query: str = entry["query"]
         relevant_docs: list[str] = entry["relevant_docs"]
-
-        print(f"Current query: {query}")
-        results = msearch.rrf_search(query, 60, limit)
+        results = msearch.rrf_search(query, k=60, limit=limit)
 
         total_retrieved = len(results)
         relevant_retrieved = 0
@@ -45,9 +43,14 @@ def main() -> None:
         titles = [p["title"] for p in results]
         
         precision = relevant_retrieved / total_retrieved
+        recall = relevant_retrieved / len(relevant_docs)
+        f1: float = 0.0
+        if precision != 0 or recall != 0:
+            f1 = 2 * (precision * recall) / (precision + recall)
         print(f"k={limit}")
-        print(f"-Query: {query}\n -Precision@{limit}: {precision:.4f}")
-        print(f" - Retrieved: {', '.join(titles)}\n - Relevant: {', '.join(relevant_docs)}")
+        print(f"- Query: {query}\n - Precision@{limit}: {precision:.4f}\n - Recall@{limit}: {recall:.4f}")
+        print(f" - F1 Score: {f1:.4f}")
+        print(f" - Retrieved: {'; '.join(titles)}\n - Relevant: {'; '.join(relevant_docs)}")
 
     
     

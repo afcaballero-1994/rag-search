@@ -1,6 +1,8 @@
 import json
-import os
+import os, logging
 from operator import itemgetter
+
+logger = logging.getLogger(__name__)
 
 from typing import Literal
 
@@ -333,9 +335,11 @@ class HybridSearch:
                    method: Literal["spell", "rewrite", "expand"] | None = None,
                    rerank_method: Literal["individual", "batch", "cross_encoder"] | None = None
                    ) -> list[dict]:
+        logger.info(f"Original Query: {query}")
         query = enhance_query(query, method)
-        bm25_results = self._bm25_search(query, limit)
-        semantic_results = self.semantic_search.search_chunks(query, limit)
+        logger.info(f"Enhanced query: {query}")
+        bm25_results = self._bm25_search(query, limit * 5)
+        semantic_results = self.semantic_search.search_chunks(query, limit * 5)
 
         combined_results: dict = {}
 
@@ -382,7 +386,13 @@ class HybridSearch:
             }
             response.append(tmp)
 
-        if rerank_method is not None:
-            return rerank(query, response, rerank_method)
+        logger.info(f"RRF results: {response}\n")
 
-        return sorted(response, key=lambda x: x["rrf_score"], reverse=True)[:limit]
+        if rerank_method is not None:
+            r = rerank(query, response, rerank_method)
+            logger.info(f"Reranked results with {rerank_method}: {r}\n")
+            return r
+
+        sorted_results = sorted(response, key=lambda x: x["rrf_score"], reverse=True)[:limit]
+        logger.info(f"Results ordered: {sorted_results}\n")
+        return sorted_results
