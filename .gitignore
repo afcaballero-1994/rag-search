@@ -10,3 +10,4 @@ cache/
 .venv
 /data/
 .env
+rff_search.log
