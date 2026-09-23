@@ -222,7 +222,7 @@ def rerank_cross_encoder(query: str, response: list[dict]) -> list[dict]:
     for doc in response:
         pairs.append([query, f"{doc.get("title", "")} - {doc.get("document", "")}"])
 
-    cross_encoder = CrossEncoder("cross-encoder/ms-marco-TinyBERT-L2-v2")
+    cross_encoder = CrossEncoder("cross-encoder/ms-marco-TinyBERT-L2-v2", device="cuda")
 
     scores = cross_encoder.predict(pairs)
     print(len(scores))

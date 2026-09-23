@@ -9,8 +9,34 @@ dependencies = [
     "numpy==2.3.3",
     "openai==2.44.0",
     "python-dotenv==1.1.0",
+    "torch>=2.14.0",
+    "pytorch-triton-rocm ; sys_platform == 'linux'",
+    "triton-rocm ; sys_platform == 'linux'",
     "sentence-transformers>=5.7.0",
 ]
 [tool.pyright]
 venvPath = "."
 venv = ".venv"
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu", marker = "sys_platform != 'linux'" },
+    { index = "pytorch-rocm", marker = "sys_platform == 'linux'" },
+]
+torchvision = [
+    { index = "pytorch-rocm", marker = "sys_platform == 'linux'" },
+    { index = "pytorch-cpu", marker = "sys_platform != 'linux'" },
+]
+pytorch-triton-rocm = { index = "pytorch-rocm" }
+triton-rocm = { index = "pytorch-rocm" }
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-rocm"
+url = "https://download.pytorch.org/whl/rocm7.14"
+explicit = false
+
+[tool.uv]
+prerelease="allow"

@@ -22,7 +22,7 @@ class SemanticSearch:
     file_path = os.path.join(CACHE_PATH, "movie_embeddings.npy")
 
     def __init__(self, model_name: str = "all-MiniLM-L6-v2") -> None:
-        self.model = SentenceTransformer(model_name)
+        self.model = SentenceTransformer(model_name, device="cuda")
         self.embeddings = None
         self.documents: list | None = None
         self.document_map = {}
