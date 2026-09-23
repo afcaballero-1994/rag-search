@@ -5,6 +5,7 @@ import json
 
 from lib.hybrid_search import normalize_command
 from lib.hybrid_search import HybridSearch
+from lib.hybrid_search import load_model, MODEL
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = os.path.join(PROJECT_ROOT, "data", "movies.json")
@@ -13,6 +14,27 @@ def load_movies() ->list[dict]:
     with open(DATA_PATH) as file:
         data = json.load(file)
     return data["movies"]
+
+def get_prompt_evaluation(query: str, results: list[dict]) -> str:
+    prompt = f"""Rate how relevant each result is to this query on a 0-3 scale:
+
+Query: "{query}"
+
+Results:
+{results}
+
+Scale:
+- 3: Highly relevant
+- 2: Relevant
+- 1: Marginally relevant
+- 0: Not relevant
+
+Do NOT give any numbers other than 0, 1, 2, or 3.
+
+Return ONLY the scores in the same order you were given the documents. Return a valid JSON list, nothing else. For example:
+
+[2, 0, 3, 2, 0, 1]"""
+    return prompt
 
 def main() -> None:
     logging.basicConfig(filename="rff_search.log", level=logging.INFO)
@@ -57,6 +79,13 @@ def main() -> None:
         choices=["individual", "batch", "cross_encoder"],
         help="Rerank method to be used"
     )
+
+    rrf_search_parser.add_argument(
+        "--evaluate",
+        type=bool,
+        action=argparse.BooleanOptionalAction,
+        help="Add evaluation step made by LLM"
+    )
     
     args = parser.parse_args()
 
@@ -97,6 +126,21 @@ def main() -> None:
                 print(f"- RRF Score: {doc["rrf_score"]:.3f}")
                 print(f"- BM25 Rank: {doc["bm25_rank"]}, Semantic Rank: {doc["semantic_rank"]}")
                 print(f"-- {doc["document"]}...")
+
+            if args.evaluate:
+                prompt = get_prompt_evaluation(args.query, results)
+                client = load_model()
+                response = client.chat.completions.create(
+                    model=MODEL, messages=[{"role": "user", "content": prompt}]
+                )
+
+                data: str | None = response.choices[0].message.content
+                if data is None:
+                    raise RuntimeError("No response received model evaluation step")
+                scores = json.loads(data)
+                
+                for jdx, score in enumerate(scores):
+                    print(f"{jdx + 1}. {results[jdx]["title"]}: {score}/3")
         case _:
             parser.print_help()
 
