@@ -25,6 +25,16 @@ def main() -> None:
     summarize_parser.add_argument("query", type=str, help="Search query to get summaries from")
     summarize_parser.add_argument("--limit", type=int, nargs="?", default=5, help="Maximmun results")
 
+    citations_parser = subparsers.add_parser(
+        "citations", help="Get a summary including citations"
+    )
+    citations_parser.add_argument("query", type=str, help="Search query to get summary with citation")
+    citations_parser.add_argument("--limit", type=int, nargs="?", default=5, help="Maximmun number results default=5")
+
+    questions_parser = subparsers.add_parser("question", help="Perform a search and try to find an answer")
+    questions_parser.add_argument("question", type=str, help="Question you may have")
+    questions_parser.add_argument("--limit", type=int, nargs="?", default=5, help="Maximmun number results default=5")
+
     args = parser.parse_args()
     client = load_model()
     match args.command:
@@ -81,6 +91,74 @@ Provide a comprehensive 3–4 sentence answer that combines information from mul
             for doc in results:
                 print(f"- {doc["title"]}")
             print(f"LLM Summary:\n{message.strip()}")
+        case "citations":
+            query = args.query
+            limit = args.limit
+            results = get_results(query, limit)
+            prompt = f"""Answer the query below and give information based on the provided documents.
+
+The answer should be tailored to users of Webflyx, a movie streaming service.
+If not enough information is available to provide a good answer, say so, but give the best answer possible while citing the sources available.
+
+Query: {query}
+
+Documents:
+{results}
+
+Instructions:
+- Provide a comprehensive answer that addresses the query
+- Cite sources in the format [1], [2], etc. when referencing information
+- On your answer, please include the title or the source used to get that information
+- If sources disagree, mention the different viewpoints
+- If the answer isn't in the provided documents, say "I don't have enough information"
+- Be direct and informative
+
+Answer:"""
+            response = client.chat.completions.create(
+                model=MODEL, messages=[{"role": "user", "content": prompt}]
+            )
+
+            message = response.choices[0].message.content
+            if message is None:
+                raise RuntimeError("No valid response")
+            print("Search Results:")
+            for doc in results:
+                print(f"- {doc["title"]}")
+            print(f"LLM Answer:\n{message.strip()}")
+        case "question":
+            question = args.question
+            limit = args.limit
+            results = get_results(question, limit)
+            context = ""
+            for idx, doc in enumerate(results, 1):
+                context += f"{idx}. {doc["title"]}: {doc["document"]}\n\n"
+            
+            prompt = f"""Answer the user's question based on the provided movies that are available on Webflyx, a streaming service.
+
+Question: {question}
+
+Documents:
+{context}
+
+Instructions:
+- Answer questions directly and concisely
+- Be casual and conversational
+- Don't be cringe or hype-y
+- Talk like a normal person would in a chat conversation
+
+Answer:"""
+            
+            response = client.chat.completions.create(
+                model=MODEL, messages=[{"role": "user", "content": prompt}]
+            )
+
+            message = response.choices[0].message.content
+            if message is None:
+                raise RuntimeError("No valid response")
+            print("Search Results:")
+            for doc in results:
+                print(f"- {doc["title"]}")
+            print(f"Answer:\n{message.strip()}")
         case _:
             parser.print_help()
 

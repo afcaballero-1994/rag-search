@@ -15,7 +15,7 @@ from .semantic_search import ChunkedSemanticSearch
 from sentence_transformers import CrossEncoder
 
 
-MODEL = "dots-studio/dots-3-note-preview:free"
+MODEL = "openrouter/free"
 
 
 def get_prompt(query: str, method: str) -> str | None:
@@ -344,8 +344,8 @@ class HybridSearch:
         logger.info(f"Original Query: {query}")
         query = enhance_query(query, method)
         logger.info(f"Enhanced query: {query}")
-        bm25_results = self._bm25_search(query, limit * 5)
-        semantic_results = self.semantic_search.search_chunks(query, limit * 5)
+        bm25_results = self._bm25_search(query, limit)
+        semantic_results = self.semantic_search.search_chunks(query, limit)
 
         combined_results: dict = {}
 
